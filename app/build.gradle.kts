@@ -1,3 +1,8 @@
+import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
+import java.net.URI
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,19 +11,21 @@ plugins {
 // ---- sherpa-onnx AAR 자동 확보 ----
 // JitPack/Maven Central에 배포되지 않으므로 공식 GitHub 릴리스에서 직접 받는다.
 // 최초 1회만 내려받고 app/libs/에 캐시된다 (git에는 올라가지 않음).
+// 주의: Gradle 스크립트에서는 java.net.URL 처럼 풀네임을 쓰면 'java'가
+//       Gradle의 java 확장으로 오인되므로 반드시 위처럼 import 해서 쓴다.
 val sherpaVersion = "1.12.40"
-val sherpaAar = file("libs/sherpa-onnx-$sherpaVersion.aar")
+val sherpaAar: File = file("libs/sherpa-onnx-$sherpaVersion.aar")
 if (!sherpaAar.exists()) {
     sherpaAar.parentFile.mkdirs()
-    val url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/" +
+    val downloadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/" +
             "v$sherpaVersion/sherpa-onnx-$sherpaVersion.aar"
-    logger.lifecycle("sherpa-onnx AAR 다운로드 중 (약 55MB)... $url")
+    logger.lifecycle("sherpa-onnx AAR 다운로드 중 (약 55MB)... $downloadUrl")
     val tmp = File(sherpaAar.parentFile, "sherpa-onnx.aar.part")
-    java.net.URL(url).openStream().use { input ->
-        tmp.outputStream().use { output -> input.copyTo(output) }
+    URI(downloadUrl).toURL().openStream().use { input: InputStream ->
+        tmp.outputStream().use { output: OutputStream -> input.copyTo(output) }
     }
     if (!tmp.renameTo(sherpaAar)) throw GradleException("sherpa-onnx AAR 저장 실패")
-    logger.lifecycle("sherpa-onnx AAR 준비 완료")
+    logger.lifecycle("sherpa-onnx AAR 준비 완료 (${sherpaAar.length() / 1024 / 1024}MB)")
 }
 
 android {

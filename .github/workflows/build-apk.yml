@@ -31,6 +31,19 @@ jobs:
           path: app/libs
           key: sherpa-aar-1.12.40
 
+      - name: sherpa-onnx AAR 준비
+        run: |
+          V=1.12.40
+          mkdir -p app/libs
+          if [ ! -f "app/libs/sherpa-onnx-$V.aar" ]; then
+            echo "AAR 다운로드 중..."
+            curl -fL --retry 3 -o "app/libs/sherpa-onnx-$V.aar" \
+              "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$V/sherpa-onnx-$V.aar"
+          else
+            echo "캐시된 AAR 사용"
+          fi
+          ls -lh app/libs
+
       - name: gradlew 실행 권한
         run: chmod +x ./gradlew
 
