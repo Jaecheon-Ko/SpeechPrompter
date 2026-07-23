@@ -35,7 +35,9 @@
         android:gravity="top|start"
         android:hint="@string/script_hint"
         android:inputType="textMultiLine"
-        android:background="@android:drawable/edit_text" />
+        android:background="@android:drawable/edit_text"
+        android:textColor="#DE000000"
+        android:textColorHint="#61000000" />
 
     <LinearLayout
         android:orientation="horizontal"

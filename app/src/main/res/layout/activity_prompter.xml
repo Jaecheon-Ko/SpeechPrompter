@@ -21,7 +21,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:padding="24dp"
-            android:lineSpacingMultiplier="1.7"
+            android:lineSpacingMultiplier="1.35"
             android:textColor="@color/text_upcoming"
             android:textSize="46sp"
             android:clickable="true"
@@ -89,7 +89,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:minWidth="0dp"
-                android:text="@string/lang_mixed" />
+                android:text="@string/lang_ko" />
 
             <Button
                 android:id="@+id/btnToggle"
@@ -182,6 +182,22 @@
                 android:valueFrom="15"
                 android:valueTo="55"
                 android:value="32" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/spacing"
+                android:textColor="@color/text_upcoming"
+                android:textSize="12sp" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/spacingSlider"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:valueFrom="1.0"
+                android:valueTo="2.2"
+                android:value="1.35" />
         </LinearLayout>
     </LinearLayout>
 

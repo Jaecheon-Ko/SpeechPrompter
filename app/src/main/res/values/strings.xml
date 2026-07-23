@@ -19,6 +19,8 @@
     <string name="delete">삭제</string>
     <string name="voice_track">🎙 음성추적</string>
     <string name="lang_mixed">한영</string>
+    <string name="lang_ko">한국어</string>
+    <string name="spacing">행간</string>
     <string name="font">글자</string>
     <string name="speed">속도</string>
     <string name="position">위치</string>

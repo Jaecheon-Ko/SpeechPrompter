@@ -28,9 +28,15 @@ class WordMatcher(script: String) {
      * @return 위치가 전진했으면 true
      */
     fun update(recognized: String, mixed: Boolean): Boolean {
-        if (words.isEmpty()) return false
         val rec = recognized.split(WS).map(::normWord).filter { it.isNotEmpty() }.takeLast(8)
-        if (rec.isEmpty()) return false
+        if (tryMatch(rec, mixed)) return true
+        // 부분 결과의 마지막 단어는 발화 중간에 잘렸을 수 있음 → 제외하고 한 번 더
+        if (rec.size >= 2 && tryMatch(rec.dropLast(1), mixed)) return true
+        return false
+    }
+
+    private fun tryMatch(rec: List<String>, mixed: Boolean): Boolean {
+        if (words.isEmpty() || rec.isEmpty()) return false
 
         val n = rec.size
         val maxScore = n * (n + 1) / 2
@@ -70,9 +76,9 @@ class WordMatcher(script: String) {
 
         if (bestJ < 0) return false
         val jump = bestJ - curIdx
-        if (jump <= 0) return false                          // 전진만 허용
+        if (jump <= 0) return false                          // 전진만 허용 (뒤로는 손 스크롤)
         if (jump > 5 && bestCount < 2) return false          // 큰 점프엔 근거 2개 이상
-        val need = if (jump > 15) 0.70 else 0.45
+        val need = if (jump > 15) 0.60 else 0.35
         if (bestScore < maxScore * need) return false
 
         curIdx = bestJ

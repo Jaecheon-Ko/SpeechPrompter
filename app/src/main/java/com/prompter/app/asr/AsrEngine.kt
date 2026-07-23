@@ -49,7 +49,7 @@ class AsrEngine(
                     useInverseTextNormalization = true,
                 ),
                 tokens = File(modelDir, "tokens.txt").absolutePath,
-                numThreads = 2,
+                numThreads = 4,
                 debug = false,
             ),
         )
@@ -151,11 +151,11 @@ class AsrEngine(
     companion object {
         const val SAMPLE_RATE = 16000
         /** 이 RMS 이상이면 발화 중으로 간주 (환경에 따라 조정) */
-        private const val ENERGY_GATE = 0.012
+        private const val ENERGY_GATE = 0.008
         /** 이만큼 조용하면 문장 종료로 보고 버퍼 리셋 */
-        private const val END_SILENCE_MS = 700
+        private const val END_SILENCE_MS = 500
         /** 부분 결과 디코딩 주기 */
-        private const val DECODE_EVERY_MS = 500
+        private const val DECODE_EVERY_MS = 300
         /** 한 세그먼트 최대 길이(초) — 초과 시 강제 리셋 */
         private const val MAX_SEG_SEC = 10
     }

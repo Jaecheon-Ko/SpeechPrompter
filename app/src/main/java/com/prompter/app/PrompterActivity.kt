@@ -6,6 +6,7 @@ import android.text.Spannable
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
 import android.view.Choreographer
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
@@ -32,7 +33,7 @@ class PrompterActivity : AppCompatActivity() {
 
     // ---- 모드 상태 ----
     private var voiceMode = true
-    private var langMode = 1 // 0 한국어, 1 한영, 2 English
+    private var langMode = 0 // 0 한국어, 1 한영, 2 English
     private var running = false
     private var barsVisible = true
 
@@ -44,6 +45,8 @@ class PrompterActivity : AppCompatActivity() {
     private var lead = 0f            // 선행 보정
     private var maxTarget = 0f       // ★ 단조 증가 잠금
     private var manualPosF = 0f      // 수동 모드 부동소수 누적
+    private var userAdjusting = false // 손 스크롤 중 — 자동 추적 일시 정지
+    private var snapRunnable: Runnable? = null
 
     // ---- 색상 ----
     private var colorRead = 0
@@ -125,14 +128,34 @@ class PrompterActivity : AppCompatActivity() {
         b.posSlider.addOnChangeListener { _, v, _ -> setReadLinePercent(v / 100f) }
         setReadLinePercent(b.posSlider.value / 100f)
 
+        b.spacingSlider.addOnChangeListener { _, v, _ ->
+            b.scriptView.setLineSpacing(0f, v)
+        }
+
         // 속도 슬라이더는 루프에서 직접 읽음 (수동 모드 전용)
 
         // 본문 탭 → 바 숨김/표시
         b.scriptView.setOnClickListener { toggleBars() }
 
-        // 수동 모드에서 손 스크롤 시 누적값 동기화
-        b.scrollView.setOnTouchListener { _, _ ->
-            manualPosF = b.scrollView.scrollY.toFloat()
+        // 손 스크롤: 자동 추적을 잠시 멈추고, 손을 떼면 그 지점부터 다시 따라감
+        // (뒤로 되감아 지나간 부분부터 재녹화 가능)
+        b.scrollView.setOnTouchListener { _, ev ->
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    userAdjusting = true
+                    snapRunnable?.let(b.scrollView::removeCallbacks)
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val r = Runnable {
+                        manualPosF = b.scrollView.scrollY.toFloat()
+                        if (running && voiceMode) snapToReadLine()
+                        else maxTarget = b.scrollView.scrollY.toFloat()
+                        userAdjusting = false
+                    }
+                    snapRunnable = r
+                    b.scrollView.postDelayed(r, 700) // 관성 스크롤이 멎을 시간
+                }
+            }
             false
         }
 
@@ -235,6 +258,7 @@ class PrompterActivity : AppCompatActivity() {
         lastFrameNs = now
 
         val sv = b.scrollView
+        if (userAdjusting) return
         if (voiceMode) {
             if (matcher.words.isEmpty()) return
             val h = sv.height
@@ -248,7 +272,7 @@ class PrompterActivity : AppCompatActivity() {
             maxTarget = target // ★ 역주행 금지
 
             val cur = sv.scrollY.toFloat()
-            val next = cur + (target - cur) * min(1f, dt * 7f)
+            val next = cur + (target - cur) * min(1f, dt * 10f)
             sv.scrollTo(0, next.roundToInt().coerceAtLeast(0))
         } else {
             // 수동 등속 스크롤
@@ -318,6 +342,7 @@ class PrompterActivity : AppCompatActivity() {
         matcher.reset(nearest)
         maxTarget = b.scrollView.scrollY.toFloat()
         lead = 0f
+        lastMatchNs = 0L
         applyHighlight()
     }
 
