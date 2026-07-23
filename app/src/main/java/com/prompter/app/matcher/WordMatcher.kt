@@ -46,12 +46,18 @@ class WordMatcher(script: String) {
         var bestJ = -1
         var bestScore = 0
         var bestCount = 0
+        var bestConsec = 0   // 인식·대본 양쪽에서 서로 붙어 있는 단어쌍 수
+        var bestExact = 0    // 접두사 아닌 완전 일치 수
 
         for (j in from..to) {
             // 가장 최근 인식 단어가 반드시 일치할 것
             if (!wordsMatch(rec[n - 1], words[j].norm, mixed)) continue
             var score = n // t = n-1 → +(t+1) = n
             var count = 1
+            var exact = if (rec[n - 1] == words[j].norm) 1 else 0
+            var consec = 0
+            var prevScriptIdx = j
+            var prevRecT = n - 1
             var si = j - 1
             // 나머지 인식 단어를 뒤에서부터 정렬 (대본 쪽 최대 2단어 건너뛰기 허용)
             for (t in n - 2 downTo 0) {
@@ -66,20 +72,38 @@ class WordMatcher(script: String) {
                 if (found >= 0) {
                     score += t + 1
                     count++
+                    if (rec[t] == words[found].norm) exact++
+                    // 인식에서도 연속, 대본에서도 연속인 단어쌍 = 강한 증거
+                    if (prevRecT == t + 1 && prevScriptIdx == found + 1) consec++
+                    prevScriptIdx = found
+                    prevRecT = t
                     si = found - 1
                 }
             }
-            if (score > bestScore || (score == bestScore && j > bestJ)) {
+            // 동점이면 가까운 후보 유지 (뒤쪽 중복 단어로의 점프 방지)
+            if (score > bestScore) {
                 bestScore = score; bestJ = j; bestCount = count
+                bestConsec = consec; bestExact = exact
             }
         }
 
         if (bestJ < 0) return false
         val jump = bestJ - curIdx
-        if (jump <= 0) return false                          // 전진만 허용 (뒤로는 손 스크롤)
-        if (jump > 5 && bestCount < 2) return false          // 큰 점프엔 근거 2개 이상
-        val need = if (jump > 15) 0.60 else 0.35
-        if (bestScore < maxScore * need) return false
+        if (jump <= 0) return false // 전진만 허용 (뒤로는 손 스크롤)
+
+        // 점프 거리별 차등 증거: 멀리 갈수록 강한 근거를 요구
+        val accepted = when {
+            // 바로 근처: 민감하게 따라감
+            jump <= 3 -> bestScore >= maxScore * 0.35
+            // 중거리: 2단어 이상 + (연속쌍 1개 또는 완전일치 2개)
+            jump <= 10 -> bestCount >= 2 &&
+                    (bestConsec >= 1 || bestExact >= 2) &&
+                    bestScore >= maxScore * 0.50
+            // 장거리: 3단어 이상 + 연속쌍 필수 + 높은 점수
+            else -> bestCount >= 3 && bestConsec >= 1 &&
+                    bestScore >= maxScore * 0.70
+        }
+        if (!accepted) return false
 
         curIdx = bestJ
         return true
