@@ -4,12 +4,13 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000">
+    android:background="@color/bg">
 
     <ScrollView
         android:id="@+id/scrollView"
         android:layout_width="0dp"
         android:layout_height="0dp"
+        android:scrollbars="none"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toTopOf="@id/controlBar"
         app:layout_constraintStart_toStartOf="parent"
@@ -20,11 +21,30 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:padding="24dp"
-            android:paddingBottom="400dp"
-            android:lineSpacingMultiplier="1.35"
-            android:textColor="#FFFFFF"
-            android:textSize="34sp" />
+            android:lineSpacingMultiplier="1.7"
+            android:textColor="@color/text_upcoming"
+            android:textSize="46sp"
+            android:clickable="true"
+            android:focusable="true" />
     </ScrollView>
+
+    <!-- 읽기 라인: 상단 N% 지점 (위치 슬라이더로 이동) -->
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/guideRead"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        app:layout_constraintGuide_percent="0.32" />
+
+    <View
+        android:id="@+id/readLine"
+        android:layout_width="0dp"
+        android:layout_height="2dp"
+        android:background="@color/accent"
+        android:alpha="0.7"
+        app:layout_constraintTop_toTopOf="@id/guideRead"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <View
         android:id="@+id/recIndicator"
@@ -32,59 +52,153 @@
         android:layout_height="12dp"
         android:layout_margin="12dp"
         android:alpha="0.2"
-        android:background="#FF3B30"
+        android:background="@color/mic_on"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- 컨트롤 바 (2행) -->
     <LinearLayout
         android:id="@+id/controlBar"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:padding="8dp"
-        android:background="#111318"
+        android:orientation="vertical"
+        android:padding="6dp"
+        android:background="@color/panel"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <Button
-            android:id="@+id/btnToggle"
-            android:layout_width="wrap_content"
+        <!-- 1행: 토글·언어·시작·처음·거울 -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/start" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-        <Button
-            android:id="@+id/btnRestart"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:text="@string/restart" />
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/voiceSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/voice_track"
+                android:textColor="@color/text_upcoming" />
 
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/mirrorSwitch"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:text="@string/mirror"
-            android:textColor="#FFFFFF" />
+            <Button
+                android:id="@+id/btnLang"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:minWidth="0dp"
+                android:text="@string/lang_mixed" />
 
-        <com.google.android.material.slider.Slider
-            android:id="@+id/fontSlider"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="12dp"
-            android:valueFrom="20"
-            android:valueTo="72"
-            android:value="34" />
+            <Button
+                android:id="@+id/btnToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="@string/start" />
 
-        <TextView
-            android:id="@+id/debugText"
-            android:layout_width="wrap_content"
+            <Button
+                android:id="@+id/btnRestart"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:minWidth="0dp"
+                android:text="@string/restart" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/mirrorSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="@string/mirror"
+                android:textColor="@color/text_upcoming" />
+
+            <TextView
+                android:id="@+id/debugText"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:gravity="end"
+                android:textColor="#66FFFFFF"
+                android:textSize="11sp"
+                android:maxLines="1"
+                android:ellipsize="start" />
+        </LinearLayout>
+
+        <!-- 2행: 슬라이더 3종 -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:maxWidth="220dp"
-            android:textColor="#66FFFFFF"
-            android:textSize="11sp" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/font"
+                android:textColor="@color/text_upcoming"
+                android:textSize="12sp" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/fontSlider"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:valueFrom="24"
+                android:valueTo="90"
+                android:value="46" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/speed"
+                android:textColor="@color/text_upcoming"
+                android:textSize="12sp" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/speedSlider"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:valueFrom="10"
+                android:valueTo="200"
+                android:value="60" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/position"
+                android:textColor="@color/text_upcoming"
+                android:textSize="12sp" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/posSlider"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:valueFrom="15"
+                android:valueTo="55"
+                android:value="32" />
+        </LinearLayout>
     </LinearLayout>
+
+    <!-- 3-2-1 카운트다운 오버레이 -->
+    <TextView
+        android:id="@+id/countdown"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:gravity="center"
+        android:background="#B3000000"
+        android:text="@string/count_3"
+        android:textColor="@color/accent"
+        android:textSize="120sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#FF000000</color>
+    <color name="accent">#FFFFD23F</color>
+    <color name="text_upcoming">#FFEFEFEF</color>
+    <color name="text_read">#FF5A5A5A</color>
+    <color name="panel">#FF141414</color>
+    <color name="mic_on">#FFE53935</color>
+</resources>

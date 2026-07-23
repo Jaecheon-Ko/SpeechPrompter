@@ -30,6 +30,7 @@ import kotlin.math.sqrt
  */
 class AsrEngine(
     modelDir: File,
+    language: String = "", // "ko" / "en" / "" (자동, 한영 혼용)
     private val onPartial: (String) -> Unit,
     private val onError: (String) -> Unit,
 ) {
@@ -44,7 +45,7 @@ class AsrEngine(
             modelConfig = OfflineModelConfig(
                 senseVoice = OfflineSenseVoiceModelConfig(
                     model = File(modelDir, "model.int8.onnx").absolutePath,
-                    language = "", // auto: ko/en 혼용 자동 감지
+                    language = language,
                     useInverseTextNormalization = true,
                 ),
                 tokens = File(modelDir, "tokens.txt").absolutePath,

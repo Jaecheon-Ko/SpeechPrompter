@@ -10,6 +10,17 @@
     <string name="mic_needed">음성 인식을 위해 마이크 권한이 필요합니다</string>
     <string name="start">▶ 시작</string>
     <string name="stop">⏸ 정지</string>
-    <string name="restart">처음부터</string>
-    <string name="mirror">미러</string>
+    <string name="restart">⟲ 처음</string>
+    <string name="mirror">거울</string>
+    <string name="load_file">파일 불러오기 (txt/docx)</string>
+    <string name="save">저장</string>
+    <string name="clear">지우기</string>
+    <string name="my_scripts">내 대본</string>
+    <string name="delete">삭제</string>
+    <string name="voice_track">🎙 음성추적</string>
+    <string name="lang_mixed">한영</string>
+    <string name="font">글자</string>
+    <string name="speed">속도</string>
+    <string name="position">위치</string>
+    <string name="count_3">3</string>
 </resources>
