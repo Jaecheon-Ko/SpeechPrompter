@@ -3,6 +3,24 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// ---- sherpa-onnx AAR 자동 확보 ----
+// JitPack/Maven Central에 배포되지 않으므로 공식 GitHub 릴리스에서 직접 받는다.
+// 최초 1회만 내려받고 app/libs/에 캐시된다 (git에는 올라가지 않음).
+val sherpaVersion = "1.12.40"
+val sherpaAar = file("libs/sherpa-onnx-$sherpaVersion.aar")
+if (!sherpaAar.exists()) {
+    sherpaAar.parentFile.mkdirs()
+    val url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/" +
+            "v$sherpaVersion/sherpa-onnx-$sherpaVersion.aar"
+    logger.lifecycle("sherpa-onnx AAR 다운로드 중 (약 55MB)... $url")
+    val tmp = File(sherpaAar.parentFile, "sherpa-onnx.aar.part")
+    java.net.URL(url).openStream().use { input ->
+        tmp.outputStream().use { output -> input.copyTo(output) }
+    }
+    if (!tmp.renameTo(sherpaAar)) throw GradleException("sherpa-onnx AAR 저장 실패")
+    logger.lifecycle("sherpa-onnx AAR 준비 완료")
+}
+
 android {
     namespace = "com.prompter.app"
     compileSdk = 34
@@ -39,11 +57,8 @@ android {
 }
 
 dependencies {
-    // sherpa-onnx: JitPack 경유 (jitpack.yml이 com.k2fsa.sherpa.onnx 좌표로 설치)
-    implementation("com.k2fsa.sherpa.onnx:sherpa-onnx:1.12.40")
-    // JitPack이 실패하면: GitHub Releases에서 sherpa-onnx-vX.Y.Z.aar 다운로드 후
-    // app/libs/에 넣고 아래 줄로 교체
-    // implementation(files("libs/sherpa-onnx.aar"))
+    // sherpa-onnx: 위에서 자동 다운로드한 공식 릴리스 AAR
+    implementation(files(sherpaAar))
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")

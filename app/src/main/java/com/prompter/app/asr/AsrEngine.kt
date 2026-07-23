@@ -49,7 +49,6 @@ class AsrEngine(
                 ),
                 tokens = File(modelDir, "tokens.txt").absolutePath,
                 numThreads = 2,
-                modelType = "sense_voice",
                 debug = false,
             ),
         )
