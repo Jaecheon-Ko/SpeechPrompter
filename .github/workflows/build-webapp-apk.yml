@@ -1,0 +1,59 @@
+name: Build Voice Prompter APK (web)
+
+on:
+  push:
+    paths:
+      - 'webapp/**'
+      - '.github/workflows/build-webapp-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webapp
+
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v4
+
+      - name: JDK 17 설치
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle 캐시 설정
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: APK 빌드
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: APK 이름 정리
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/debug/app-debug.apk out/voice-prompter.apk
+
+      - name: 아티팩트 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-prompter-apk
+          path: webapp/out/voice-prompter.apk
+
+      - name: voice-latest 릴리스 갱신
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: voice-latest
+          target_commitish: ${{ github.sha }}
+          name: "음성 프롬프터 앱 최신 빌드 (#${{ github.run_number }})"
+          body: |
+            커밋 `${{ github.sha }}` 기준 자동 빌드된 APK입니다.
+            폰에서 아래 voice-prompter.apk 를 눌러 바로 설치하세요.
+          files: webapp/out/voice-prompter.apk
+          prerelease: true
