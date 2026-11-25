@@ -33,7 +33,12 @@ jobs:
       - name: APK 빌드
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug --stacktrace
+          # Maven Central 이 병렬 요청을 429 로 거절하는 경우가 있어 1개 워커 + 재시도
+          for i in 1 2 3; do
+            ./gradlew assembleDebug --max-workers=1 && exit 0
+            echo "빌드 실패 ($i/3), 30초 후 재시도"; sleep 30
+          done
+          exit 1
 
       - name: APK 이름 정리
         run: |
