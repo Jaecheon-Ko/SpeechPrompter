@@ -1,0 +1,12 @@
+/* Lovable(Tailwind) 기본 리셋 중 이 앱이 쓰는 부분만 */
+*, *::before, *::after { box-sizing: border-box; border: 0 solid; }
+html { line-height: 1.5; -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; background: #000; }
+h1, p { margin: 0; }
+button, input, select, textarea {
+  font: inherit; color: inherit; margin: 0; padding: 0;
+  background-color: transparent; letter-spacing: inherit;
+}
+button, select { cursor: pointer; text-transform: none; }
+button:disabled { cursor: default; }
+textarea { outline: none; }

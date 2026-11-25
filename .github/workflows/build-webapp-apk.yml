@@ -27,6 +27,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Node.js 설치
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: webapp/web/package-lock.json
+
+      - name: 웹 앱 빌드 (APK assets/www 로 출력)
+        working-directory: webapp/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
       - name: Gradle 캐시 설정
         uses: gradle/actions/setup-gradle@v3
 

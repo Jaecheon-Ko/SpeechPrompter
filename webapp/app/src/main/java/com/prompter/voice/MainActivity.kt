@@ -6,8 +6,6 @@ import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Color
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
 import android.view.WindowManager
@@ -15,9 +13,8 @@ import android.webkit.JsResult
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
@@ -25,15 +22,20 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 
 class MainActivity : ComponentActivity() {
 
     companion object {
-        const val APP_URL = "https://voice-prompter-kr.lovable.app/"
-        private const val APP_HOST_SUFFIX = "lovable.app"
-        private const val OFFLINE_URL = "file:///android_asset/offline.html"
+        /**
+         * 웹 앱은 APK 의 assets/www 에 들어 있고, WebViewAssetLoader 가 이 가상 https 주소로
+         * 제공한다. 인터넷·외부 서버 없이 열리며 localStorage(저장 대본)도 이 주소 기준으로 유지된다.
+         */
+        private const val ASSET_HOST = WebViewAssetLoader.DEFAULT_DOMAIN
+        private const val APP_ORIGIN = "https://$ASSET_HOST"
+        const val APP_URL = "$APP_ORIGIN/assets/www/index.html"
 
         /** 하드웨어 뒤로가기: 프롬프터 화면이면 "← 목록" 버튼을 눌러준다 */
         private const val BACK_JS = """
@@ -85,8 +87,13 @@ class MainActivity : ComponentActivity() {
             useWideViewPort = true
             loadWithOverviewMode = true
             allowFileAccess = false
-            cacheMode = if (isOnline()) WebSettings.LOAD_DEFAULT else WebSettings.LOAD_CACHE_ELSE_NETWORK
+            allowContentAccess = false
         }
+
+        val assetLoader = WebViewAssetLoader.Builder()
+            .setDomain(ASSET_HOST)
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .build()
 
         speech = SpeechBridge(this, webView) {
             micPermission.launch(Manifest.permission.RECORD_AUDIO)
@@ -94,7 +101,7 @@ class MainActivity : ComponentActivity() {
         if (speech.isAvailable) {
             webView.addJavascriptInterface(speech.jsApi, "AndroidSpeech")
             if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-                WebViewCompat.addDocumentStartJavaScript(webView, polyfill, setOf("*"))
+                WebViewCompat.addDocumentStartJavaScript(webView, polyfill, setOf(APP_ORIGIN))
             }
         }
 
@@ -102,9 +109,7 @@ class MainActivity : ComponentActivity() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
                 val host = uri.host.orEmpty()
-                if (uri.scheme == "file" || host == APP_HOST_SUFFIX || host.endsWith(".$APP_HOST_SUFFIX")) {
-                    return false
-                }
+                if (host == ASSET_HOST) return false
                 // 외부 링크는 기본 브라우저로
                 try {
                     startActivity(Intent(Intent.ACTION_VIEW, uri))
@@ -113,19 +118,14 @@ class MainActivity : ComponentActivity() {
                 return true
             }
 
+            override fun shouldInterceptRequest(
+                view: WebView,
+                request: WebResourceRequest,
+            ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
+
             override fun onPageFinished(view: WebView, url: String) {
                 // 문서 시작 스크립트를 지원하지 않는 구형 WebView 대비 (중복 실행은 스크립트가 막음)
                 if (speech.isAvailable) view.evaluateJavascript(polyfill, null)
-            }
-
-            override fun onReceivedError(
-                view: WebView,
-                request: WebResourceRequest,
-                error: WebResourceError,
-            ) {
-                if (request.isForMainFrame && request.url.scheme != "file") {
-                    view.loadUrl(OFFLINE_URL)
-                }
             }
         }
 
@@ -232,9 +232,4 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun isOnline(): Boolean {
-        val cm = getSystemService(ConnectivityManager::class.java) ?: return true
-        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
-        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-    }
 }
