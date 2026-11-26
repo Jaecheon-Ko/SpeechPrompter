@@ -198,7 +198,19 @@ class SpeechBridge(
 
         override fun onPartialResults(partialResults: Bundle?) {
             if (!live()) return
-            val text = firstText(partialResults)
+            // Google 인식기는 아직 확정 안 된 뒷부분을 UNSTABLE_TEXT 로 따로 준다.
+            // 이걸 붙이면 0.2~0.5초 더 빨리 최신 단어를 받을 수 있다.
+            val stable = firstText(partialResults)
+            val unstable = partialResults
+                ?.getStringArrayList(EXTRA_UNSTABLE_TEXT)
+                ?.firstOrNull()
+                ?.trim()
+                .orEmpty()
+            val text = when {
+                unstable.isEmpty() -> stable
+                stable.isEmpty() -> unstable
+                else -> "$stable $unstable"
+            }
             if (text.isEmpty()) return
             lastPartial = text
             consecutiveErrors = 0
@@ -269,6 +281,8 @@ class SpeechBridge(
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, activity.packageName)
+            // Google 인식기: 받아쓰기 모드 → 세션이 길게 유지되고 중간 결과가 촘촘해진다
+            putExtra(EXTRA_DICTATION_MODE, true)
             // 대부분의 엔진이 무시하지만, 지원하는 기기에선 세션이 덜 끊긴다
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
@@ -313,6 +327,8 @@ class SpeechBridge(
         // API 31 상수를 minSdk 26 에서도 쓰기 위해 값으로 둔다
         private const val ERROR_TOO_MANY_REQUESTS = 10
         private const val ERROR_SERVER_DISCONNECTED = 11
+        private const val EXTRA_UNSTABLE_TEXT = "android.speech.extra.UNSTABLE_TEXT"
+        private const val EXTRA_DICTATION_MODE = "android.speech.extra.DICTATION_MODE"
     }
 }
 

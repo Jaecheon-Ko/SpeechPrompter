@@ -344,6 +344,13 @@ function InputScreen({
 
 type Lang = "ko-KR" | "ko-mixed" | "en-US";
 
+/** 인식 결과가 실제 발화보다 늦게 도착하는 평균 시간 */
+const RECOG_LATENCY_S = 0.5;
+/** 인식 결과보다 최대 몇 단어 앞까지 예측할지 */
+const MAX_LEAD_WORDS = 3;
+/** 이 시간 동안 인식 이벤트가 없으면 말을 멈춘 것으로 보고 예측을 멈춘다 */
+const HEARD_WINDOW_S = 0.8;
+
 function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
   // Split into blocks (paragraphs) by newline. Each block has tokens.
   const blocks = useMemo(() => {
@@ -368,6 +375,26 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
   }, [blocks]);
 
   const scriptIndex = useMemo(() => buildScriptIndex(wordNorms), [wordNorms]);
+
+  // stopAt[i] = i번째 단어가 속한 문장의 마지막 단어 번호 (예측 상한)
+  const stopAt = useMemo(() => {
+    const ends: boolean[] = [];
+    for (const b of blocks) {
+      const ws = b.tokens.filter((t) => t.isWord);
+      ws.forEach((t, k) => ends.push(k === ws.length - 1 || /[.!?。…]["'”’)\]]*$/.test(t.text)));
+    }
+    const arr = new Int32Array(ends.length);
+    let next = ends.length - 1;
+    for (let i = ends.length - 1; i >= 0; i--) {
+      if (ends[i]) next = i;
+      arr[i] = next;
+    }
+    return arr;
+  }, [blocks]);
+  const stopAtRef = useRef(stopAt);
+  useEffect(() => {
+    stopAtRef.current = stopAt;
+  }, [stopAt]);
   const scriptIndexRef = useRef(scriptIndex);
   useEffect(() => {
     scriptIndexRef.current = scriptIndex;
@@ -413,7 +440,6 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
 
 
   const [showControls, setShowControls] = useState(true);
-  const [countdown, setCountdown] = useState<number | null>(null);
   const [listening, setListening] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -424,10 +450,15 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
   const lastAdvanceTimeRef = useRef<number>(0);
   const lastVoiceMatchTimeRef = useRef<number>(performance.now());
   const maxTargetRef = useRef(0);
-  const smoothedLeadRef = useRef(0);
 
-  // px/s reading speed estimated from accepted recognition advances + DOM geometry
-  const targetVelRef = useRef(0);
+  // ---- 예측 진행 ----
+  // 음성 인식 결과는 실제 발화보다 약 0.5초 늦게 도착한다. 그 지연을 메우기 위해
+  // 측정한 읽기 속도(wps)로 현재 위치를 앞으로 예측해 스크롤/하이라이트에 쓴다.
+  // 말이 끊기면(인식 이벤트가 안 오면) 예측도 멈추고, 문장 끝을 넘어가지 않는다.
+  const lastHeardRef = useRef(0); // 마지막 인식 이벤트 시각 (= 지금 말하는 중인지)
+  const predRef = useRef(0); // 예측 위치 (소수 단어 단위, 단조 증가)
+  const [shownIdx, setShownIdx] = useState(0);
+  const shownIdxRef = useRef(0);
 
   const advanceIndex = useCallback((newIdx: number) => {
     const now = performance.now();
@@ -439,17 +470,6 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
         let inst = dw / dt;
         if (inst > 6) inst = 6;
         wpsRef.current = wpsRef.current * 0.7 + inst * 0.3;
-        // vertical speed from the real DOM distance actually covered
-        const els = wordElsRef.current;
-        const a = els[Math.min(prev, els.length - 1)];
-        const b = els[Math.min(newIdx, els.length - 1)];
-        if (a && b) {
-          const dy = b.offsetTop - a.offsetTop;
-          if (dy >= 0) {
-            const v = Math.max(0, Math.min(1200, dy / dt));
-            targetVelRef.current = targetVelRef.current * 0.6 + v * 0.4;
-          }
-        }
       }
       lastAdvanceTimeRef.current = now;
       lastVoiceMatchTimeRef.current = now;
@@ -465,18 +485,11 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
   const intentionalStopRef = useRef(false);
   const hypRef = useRef(new HypothesisTracker());
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearRestartTimer = useCallback(() => {
     if (restartTimerRef.current) {
       clearTimeout(restartTimerRef.current);
       restartTimerRef.current = null;
-    }
-  }, []);
-  const clearCountdownTimer = useCallback(() => {
-    if (countdownTimerRef.current) {
-      clearInterval(countdownTimerRef.current);
-      countdownTimerRef.current = null;
     }
   }, []);
 
@@ -566,6 +579,7 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
       rec.onresult = (ev: any) => {
         if (mySession !== sessionRef.current) return; // stale session
         if (!playingRef.current || !voiceOnRef.current) return;
+        lastHeardRef.current = performance.now();
         const items: Array<{ resultIndex: number; transcript: string; isFinal: boolean }> = [];
         for (let i = ev.resultIndex; i < ev.results.length; i++) {
           const r = ev.results[i];
@@ -578,7 +592,13 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
         const words = hypRef.current.push(items);
         if (!words) return; // duplicate interim/final for the same phrase
         const si = scriptIndexRef.current;
-        const res = matchHypothesis(si, wordIndexRef.current, words, { back: 4, forward: 30 });
+        const opts = { back: 4, forward: 30, wordDoneRatio: 0.6 };
+        // 맨 끝 단어는 아직 확정 전이라 틀릴 수 있다 → 안 맞으면 그 단어를 빼고 한 번 더
+        const res =
+          matchHypothesis(si, wordIndexRef.current, words, opts) ??
+          (words.length > 2
+            ? matchHypothesis(si, wordIndexRef.current, words.slice(0, -1), opts)
+            : null);
         if (res) advanceIndex(Math.min(res.index, si.words.length));
       };
 
@@ -606,19 +626,39 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
         if (voiceOnRef.current) {
           const h = el.clientHeight; // same coordinate space as offsetTop
           const els = wordElsRef.current;
-          const idx = Math.max(0, Math.min(wordIndexRef.current, els.length - 1));
-          const span = els[idx];
+          const n = els.length;
+          const now = performance.now();
+          const conf = Math.min(wordIndexRef.current, Math.max(0, n - 1));
+          let pred = conf;
+          const sinceHeard = (now - lastHeardRef.current) / 1000;
+          const sinceMatch = (now - lastVoiceMatchTimeRef.current) / 1000;
+          if (n > 0 && sinceHeard < HEARD_WINDOW_S && sinceMatch < 2) {
+            const lead = Math.min(
+              MAX_LEAD_WORDS,
+              wpsRef.current * Math.min(RECOG_LATENCY_S + sinceMatch, 1.5),
+            );
+            const cap = stopAtRef.current[Math.min(conf, stopAtRef.current.length - 1)] ?? conf;
+            pred = Math.min(conf + lead, Math.max(conf, cap));
+          }
+          pred = Math.max(pred, predRef.current);
+          predRef.current = pred;
+
+          const shown = Math.floor(pred);
+          if (shown !== shownIdxRef.current) {
+            shownIdxRef.current = shown;
+            setShownIdx(shown);
+          }
+
+          // 예측 위치(소수)를 줄 사이에서 보간해 부드럽게 스크롤
           let targetTop = el.scrollTop;
-          if (span) {
-            const raw = span.offsetTop - (linePosRef.current / 100) * h;
-            const sinceMatch = (performance.now() - lastVoiceMatchTimeRef.current) / 1000;
-            // bounded visual lead: 220ms of the measured reading speed, 0 before
-            // speech starts and 0 once recognition goes stale
-            const targetLead =
-              sinceMatch < 1.5 ? Math.min(110, targetVelRef.current * 0.22) : 0;
-            smoothedLeadRef.current +=
-              (targetLead - smoothedLeadRef.current) * (1 - Math.exp(-dt * 4));
-            targetTop = raw + smoothedLeadRef.current;
+          const i0 = Math.max(0, Math.min(Math.floor(pred), n - 1));
+          const a = els[i0];
+          if (a) {
+            let y = a.offsetTop;
+            const b = els[Math.min(i0 + 1, n - 1)];
+            const f = pred - Math.floor(pred);
+            if (b && f > 0) y += (b.offsetTop - a.offsetTop) * f;
+            targetTop = y - (linePosRef.current / 100) * h;
           }
 
           // never scroll backwards while voice tracking
@@ -627,7 +667,7 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
           const cur = el.scrollTop;
           const diff = targetTop - cur;
           // frame-rate independent easing; catch up faster when far behind
-          const rate = Math.abs(diff) > h * 0.3 ? 16 : 9;
+          const rate = Math.abs(diff) > h * 0.3 ? 22 : 13;
           el.scrollTop =
             Math.abs(diff) < 0.5 ? targetTop : cur + diff * (1 - Math.exp(-dt * rate));
         } else {
@@ -640,7 +680,7 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // Start/stop handling with countdown
+  // Start/stop handling
   const beginPlay = useCallback(() => {
     // Snapshot start position from current manual scroll: nearest word to the reading line
     const el = scrollRef.current;
@@ -661,38 +701,27 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
       wordIndexRef.current = bestIdx;
       setWordIndex(bestIdx);
       maxTargetRef.current = el.scrollTop;
-      smoothedLeadRef.current = 0;
-      targetVelRef.current = 0;
+      predRef.current = bestIdx;
+      shownIdxRef.current = bestIdx;
+      setShownIdx(bestIdx);
     }
-    clearCountdownTimer();
-    setCountdown(3);
-    let n = 3;
-    countdownTimerRef.current = setInterval(() => {
-      n -= 1;
-      if (n <= 0) {
-        clearCountdownTimer();
-        setCountdown(null);
-        setPlaying(true);
-        playingRef.current = true;
-        lastVoiceMatchTimeRef.current = performance.now();
-        lastAdvanceTimeRef.current = performance.now();
-        if (voiceOnRef.current) startRecognition();
-      } else {
-        setCountdown(n);
-      }
-    }, 800);
-  }, [clearCountdownTimer, startRecognition]);
+    // 카운트다운 없이 바로 듣기 시작 (말을 시작하면 그게 신호)
+    setPlaying(true);
+    playingRef.current = true;
+    lastVoiceMatchTimeRef.current = performance.now();
+    lastAdvanceTimeRef.current = performance.now();
+    lastHeardRef.current = 0;
+    if (voiceOnRef.current) startRecognition();
+  }, [startRecognition]);
 
   const pausePlay = useCallback(() => {
-    clearCountdownTimer();
-    setCountdown(null);
     setPlaying(false);
     playingRef.current = false;
     stopRecognition();
-  }, [clearCountdownTimer, stopRecognition]);
+  }, [stopRecognition]);
 
   const togglePlay = () => {
-    if (playing || countdown !== null) pausePlay();
+    if (playing) pausePlay();
     else beginPlay();
   };
 
@@ -703,8 +732,9 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
     wpsRef.current = 2.2;
     maxTargetRef.current = 0;
-    smoothedLeadRef.current = 0;
-    targetVelRef.current = 0;
+    predRef.current = 0;
+    shownIdxRef.current = 0;
+    setShownIdx(0);
     lastAdvanceTimeRef.current = 0;
   };
 
@@ -731,8 +761,9 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
     wordIndexRef.current = 0;
     setWordIndex(0);
     maxTargetRef.current = 0;
-    smoothedLeadRef.current = 0;
-    targetVelRef.current = 0;
+    predRef.current = 0;
+    shownIdxRef.current = 0;
+    setShownIdx(0);
     wpsRef.current = 2.2;
     hypRef.current.reset();
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
@@ -743,7 +774,6 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
     const el = scrollRef.current;
     if (!el) return;
     maxTargetRef.current = el.scrollTop;
-    targetVelRef.current = 0;
   }, [fontSize, linePos, mirror]);
 
   // Resize / orientation change: geometry estimates and clamp are invalid
@@ -751,8 +781,6 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
     const onResize = () => {
       const el = scrollRef.current;
       if (el) maxTargetRef.current = el.scrollTop;
-      targetVelRef.current = 0;
-      smoothedLeadRef.current = 0;
     };
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onResize);
@@ -765,13 +793,12 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
 
   useEffect(() => {
     return () => {
-      clearCountdownTimer();
       stopRecognition();
     };
-  }, [clearCountdownTimer, stopRecognition]);
+  }, [stopRecognition]);
 
   // Word index into tokens (word-count so far up to token i)
-  const currentTokWordIdx = wordIndex;
+  const currentTokWordIdx = playing && voiceOn ? Math.max(wordIndex, shownIdx) : wordIndex;
 
   const btnStyle: React.CSSProperties = {
     background: "#1a1a1a",
@@ -1059,32 +1086,6 @@ function Prompter({ script, onBack }: { script: string; onBack: () => void }) {
         </div>
       )}
 
-      {/* Countdown overlay */}
-      {countdown !== null && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(0,0,0,0.55)",
-            zIndex: 20,
-            pointerEvents: "none",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 180,
-              fontWeight: 900,
-              color: "#ffd23f",
-              lineHeight: 1,
-            }}
-          >
-            {countdown}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

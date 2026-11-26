@@ -123,6 +123,11 @@ export type MatchOptions = {
   tailTolerance?: number;
   maxHypWords?: number;
   maxHypChars?: number;
+  /**
+   * 단어의 몇 %를 읽으면 다음 단어로 넘어갈지. 생략하면 원래 규칙
+   * (4글자 이하는 전부, 그 이상은 80%). 낮출수록 빨리 넘어간다.
+   */
+  wordDoneRatio?: number;
 };
 
 export type MatchResult = {
@@ -140,7 +145,14 @@ export function matchHypothesis(
   hypWords: string[],
   opts: MatchOptions = {},
 ): MatchResult | null {
-  const { back = 4, forward = 30, tailTolerance, maxHypWords = 10, maxHypChars = 44 } = opts;
+  const {
+    back = 4,
+    forward = 30,
+    tailTolerance,
+    maxHypWords = 10,
+    maxHypChars = 44,
+    wordDoneRatio,
+  } = opts;
   const total = si.words.length;
   if (total === 0) return null;
 
@@ -183,7 +195,15 @@ export function matchHypothesis(
   const word = best.word;
   const readInWord = winStart + best.col - si.wordStart[word];
   const len = si.wordLen[word];
-  let index = readInWord >= (len <= 4 ? len : Math.ceil(len * 0.8)) ? word + 1 : word;
+  const doneAt =
+    wordDoneRatio === undefined
+      ? len <= 4
+        ? len
+        : Math.ceil(len * 0.8)
+      : len <= 1
+        ? len
+        : Math.max(1, Math.ceil(len * wordDoneRatio));
+  let index = readInWord >= doneAt ? word + 1 : word;
   if (index > total) index = total;
 
   const jump = index - current;
